@@ -11,3 +11,4 @@ The code uploaded to this repository functions in the following way:
 1. A Microsoft Word template file is created and formatted through the Word application. Plain Text Content Controls are added to text which you want to replace. Tables are captioned/titled through the application as well.
 2. The script then searches for these tags/captions and does the relevant replacing and re-formatting.
 
+I've tried to document the script itself. Please see the doc strings.
