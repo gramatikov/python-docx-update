@@ -5,8 +5,8 @@ Use case: you want to generate many Word Documents whose tables and text differ 
 
 The solutions floating around online that I'm aware of are:
 - Eric White's Document Assembler (.NET). This requires the template file be organized in a particular way. The tables themselves cannot already contain any data.
-- https://github.com/elapouya/python-docx-template. I haven't experimented with this much, however it appears to use a jinja template syntax.
-- python-docx. It's unclear how to use this library to construct template files. Also python-docx doesn't appear to recognize Structured Document Tags (sdts)
+- https://github.com/elapouya/python-docx-template. I haven't experimented with this much, however it appears to use a jinja template syntax in the template setup.
+- python-docx. It's unclear how to use this library to construct template files. Also python-docx doesn't appear to recognize Structured Document Tags (sdts).
 
 
 The code uploaded to this repository functions in the following way:
