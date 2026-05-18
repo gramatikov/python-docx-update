@@ -1,7 +1,7 @@
 
 Pythons scripts which update, or help with updating, Microsoft Word .docx files.
 
-Use case: you want to generate many Word Documents whose tables and text differ slightly from each other. The data itself is possibly already populated in the document and just requires substitution in an intelligent way to preserve the formatting.
+Use case: you want to generate many Word Documents whose tables and text differ slightly from each other. Data itself already exists in the document and just requires substitution in an intelligent way to preserve the formatting.
 
 The solutions floating around online that I'm aware of are:
 - Eric White's Document Assembler (.NET). This requires the template file be organized in a particular way. The tables themselves cannot already contain any data.
