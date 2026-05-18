@@ -1,3 +1,9 @@
+"""
+A script that stores the Named Ranges of an Excel into a json file.
+
+You call the script by specifying an Excel file.
+
+"""
 
 import win32com.client as win32
 from pathlib import Path
