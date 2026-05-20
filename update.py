@@ -18,7 +18,6 @@ from lxml.etree import QName
 from pathlib import Path
 import zipfile
 import copy
-import pandas as pd
 from datetime import datetime
 
 
@@ -30,8 +29,7 @@ NS = {'w'   : "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
 
 class Database:
     """
-    This stores the data you want to use to replace your tagged Microsoft Word elements.
-    Something that behaves like a dictionary and can be loaded from different sources.
+    My interface for interacting with the data used to do the replacing.
     """
     def __init__(self, data):
         self._data = data
@@ -114,7 +112,7 @@ def copy_properties(from_element, to_element):
     Copies the properties from from_element to to_element by manipulating the lxml (sub)Elements.
     """
     pr_other = get_or_add_properties(from_element)
-    pr       = get_or_add_properties(to_element)
+    pr = get_or_add_properties(to_element)
     to_element.replace(pr, copy.deepcopy(pr_other))
     
     
@@ -126,42 +124,51 @@ def copy_tc_properties(from_tc, to_tc):
     """ 
     copy_properties(from_tc, to_tc)
     from_p = from_tc.xpath("w:p", namespaces=NS)
-    to_p = to_tc.xpath("w:p", namespaces=NS)
-    copy_properties(from_p[0], to_p[0])
-    from_r = from_p[0].xpath("w:r", namespaces=NS)
-    to_r = to_p[0].xpath("w:r", namespaces=NS)
-    copy_properties(from_r[0], to_r[0])
+    # if the original w:tc element has a paragraph w:p, copy from it
+    if len(from_p) > 0:
+        to_p = to_tc.xpath("w:p", namespaces=NS)
+        copy_properties(from_p[0], to_p[0])
+        from_r = from_p[0].xpath("w:r", namespaces=NS)
+        # if the original w:tc/w:p element has a run w:r, copy from it
+        if len(from_r) > 0:
+            to_r = to_p[0].xpath("w:r", namespaces=NS)
+            copy_properties(from_r[0], to_r[0])
+
+
 
 
 def copy_table_properties(from_tbl, to_tbl):
     """
     The formatting properties of a table are specified in the nested subelements 
-    of the w:tblPr tag. This function loops through the relevant sub-Elements and copies
+    of the w:tbl tag. This function loops through the relevant subelements and copies
     their properties to to_tbl.
     
-    We assume the original table, from_tbl, has at least two rows (one that represents
-    the formatting of the headers and another that represents the formatting of the data).
+    We assume the original table, from_tbl, has at least two rows 
     """
+    original_rows = from_tbl.xpath("w:tr", namespaces=NS)
+    new_rows = to_tbl.xpath("w:tr", namespaces=NS)
+    cell_sequence = [len(tr.xpath("w:tc", namespaces=NS)) for tr in original_rows]
     copy_properties(from_tbl, to_tbl)
-    row_count = len(from_tbl.xpath("w:tr", namespaces=NS))
-    header_row   = from_tbl.xpath("w:tr[1]", namespaces=NS)
-    header_cells = header_row[0].xpath("w:tc", namespaces=NS)
-    data_row     = from_tbl.xpath("w:tr[{}]".format(3 if row_count >= 3 else 2), namespaces=NS)
-    data_cells   = data_row[0].xpath("w:tc", namespaces=NS)
-    #assert(len(header_cells) == len(data_cells))
-    for i, row in enumerate(to_tbl.xpath("w:tr", namespaces=NS)):
-        cells = row.xpath("w:tc", namespaces=NS)
-        copy_from = header_row if i==0 else data_row
-        copy_properties(copy_from[0], row)
-        for j in range(len(header_cells)):
-            copy_from = header_cells if i==0 else data_cells
-            copy_tc_properties(copy_from[j], cells[j])
+    # if the original table only has two rows, then the second row, at index 1, will be the first proper row
+    # otherwise, the first proper row will be the third row at index 2. This helps the formatting of the table
+    first_proper_row = 2 if len(original_rows) >= 3 else 1
+    for i, new_row in enumerate(to_tbl.xpath("w:tr", namespaces=NS)):
+        new_cells = new_row.xpath("w:tc", namespaces=NS)
+        # we find the index of the row whose formatting the new_row will copy from
+        # if we see a ValueError, there is no proper row in the original table having the same number of cells
+        copy_from = 0 if i==0 else (-1 if i==len(new_rows)-1 else cell_sequence.index(len(new_cells), first_proper_row))
+        copy_from = original_rows[copy_from]
+        copy_properties(copy_from, new_row)
+        for j in range(len(new_cells)):
+            # copy_from is a row which will have the same number of cells as new_cells
+            copy_from_cells = copy_from.xpath("w:tc", namespaces=NS)
+            copy_tc_properties(copy_from_cells[j], new_cells[j])
 
 
 
 def update_table(table, replacement_table):
     """
-    Updates table by 
+    Updates the argument table by 
     1) replacing its text with the content in the replacement, and
     2) copying the relevant (nested) Pr data in the original. 
     """
@@ -174,26 +181,21 @@ def update_table(table, replacement_table):
         table.append(row)
      
 
-def table_from_html(html):
+def table_from_list_of_lists(lst):
     """
-    Helper function. Pandas DataFrames are easily converted to HTML.
-    We then use the HTML and convert it to the appropriate XML Element
-    to be used within a Microsoft Word Document.
+    Constructs the w:tbl element.
     """
-    table = etree.fromstring(html)
     tbl = WElement("tbl")
-    for row in table.xpath("//table[1]/descendant::tr"):
-        cells = row.xpath("th|td")
-        if len(cells) == 0:
-            continue
+    for row in lst:
         tr = WSubElement(tbl, "tr")
-        for cell in cells:
+        for cell in row:
             tc = WSubElement(tr, "tc")
             p  = WSubElement(tc, "p")
             r  = WSubElement(p , "r")
             t  = WSubElement(r , "t")
-            t.text = cell.text
+            t.text = cell
     return tbl
+
 
 
 
@@ -213,7 +215,8 @@ def replace_sdt_text(sdt, text):
     with identical formatting properties.
     
     This function first merges all runs into the first run element 
-    and then writes the text of that single run element.
+    and then writes the text of that single run element. I need
+    to update this. It just has to delete all i>0 runs.
     """
     runs = sdt.xpath(".//w:r", namespaces=NS)
     assert(len(runs) > 0)
@@ -238,13 +241,7 @@ def get_table_by_caption(document, caption):
     """
     Finds w:tbl elements captioned (or Titled) with caption.
     """
-    tbls = document.xpath(".//w:tbl/w:tblPr/w:tblCaption[@w:val='{}']/../..".format(caption), namespaces=NS)
-    if len(tbls) == 0:
-        raise Exception("There isn't a table captioned \"{}\"".format(caption))
-    elif len(tbls) > 1:
-        raise Exception("There's more than one table captioned \"{}\"".format(caption))
-    else:
-        return tbls[0]
+    return document.xpath(".//w:tbl/w:tblPr/w:tblCaption[@w:val='{}']/../..".format(caption), namespaces=NS)
 
 
 def get_output_path(identifier):
@@ -271,17 +268,22 @@ def main():
     db = Database.from_json(database_path)
     doc = document_from_path(filename)
 
-    for src in ["Worksheet1", "Worksheet2"]:
+    # some kind of loop to iterate over each "report instance"
+    for src in ["Report1", "Report2"]:
         subdb = db.where(lambda r: r["worksheet"]==src)
+        # for each key-value pair in the report data
         for key, val in subdb.items():
+            # update each tagged/captioned element. I used a simple naming scheme to distinguish tables from text
             if key.startswith("TABLE_"):
                 caption = key[6:]
                 print("Updating table with caption \"{}\"".format(caption))
-                tbl = get_table_by_caption(doc, caption)
-                new_tbl = pd.DataFrame(val)
-                new_tbl = new_tbl.to_html(index=False)
-                new_tbl = table_from_html(new_tbl)
-                update_table(tbl, new_tbl)
+                tbls = get_table_by_caption(doc, caption)
+                if len(tbls) == 0:
+                    print("WARNING: no table captioned \"{}\" (no replacements made)".format(caption))
+                    continue
+                new_tbl = table_from_list_of_lists(val)
+                for tbl in tbls:
+                    update_table(tbl, new_tbl)
             else:
                 print("Replacing tags {} to have text \"{}\"".format(key, val))
                 sdts = get_sdt_by_tag(doc, key)
@@ -290,7 +292,7 @@ def main():
                 for sdt in sdts:
                     replace_sdt_text(sdt, val)
         
-        outfile = get_output_path(src)
+        outfile = get_output_path(filename.stem + "_" + src)
         print("Saving updated docx file to \"{}\"".format(outfile.stem))
         save_document(doc, filename, outfile)
         print("Success!!")
