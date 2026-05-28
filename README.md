@@ -10,8 +10,8 @@ The solutions floating around online that I'm aware of are:
 
 
 The code uploaded to this repository functions in the following way:
-1. A Microsoft Word template file is created and formatted through the Word application. Plain Text Content Controls are added to text which you want to replace. Tables are captioned/titled through the Word application as well. The tags and captions serve as metadata to help identify which elements to replace.
-2. You store the data you wish to use to do the substitutions somewhere, in some kind of intermediate data file, possibly json.
+1. A Microsoft Word template file is created and formatted through the Word application. There is no special syntax included in the document. Tables and text are tagged through Word's interface. For example, text in the document is highlighted with plain text content controls and tables are captioned/titled. This formatting serves to identify the elements in the document you want to replace.
+2. You store the data you wish to use to do the substitutions somewhere, in some kind of intermediate data file. 
 3. The script then searches for these tags/captions and does the relevant replacing and re-formatting.
 
 I've tried to document the script itself. Please see the doc strings.
